@@ -10,8 +10,6 @@ function save_options() {
         setTimeout(function() {
             status.textContent = '';
         }, 750);
-
-        chrome.extension.getBackgroundPage().init();
     });
 }
 

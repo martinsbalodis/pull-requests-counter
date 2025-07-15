@@ -4,7 +4,6 @@ var errorColor = '#d9534f';
 var okLimit = 1;
 var warningLimit = 3;
 var pollInterval = 1;   //in minutes
-var username = '';
 var usernameURL = 'https://api.github.com/user';
 var searchReviewsURL = 'https://api.github.com/search/issues?q=type:pr is:open review-requested:';
 var searchAssigneesURL = 'https://api.github.com/search/issues?q=type:pr is:open assignee:';
@@ -24,7 +23,13 @@ chrome.runtime.onInstalled.addListener(function (object) {
     }
 });
 
-setInterval(updateCounter, pollInterval * (60 * 1000));
+chrome.alarms.create('update-counter', {
+    periodInMinutes: pollInterval
+});
+chrome.alarms.onAlarm.addListener((alarm) => {
+    updateCounter();
+});
+
 init();
 
 function openCurrentURL() {
@@ -52,8 +57,8 @@ function openCurrentURL() {
 
 function init() {
     tokenOk = true;
-    chrome.browserAction.onClicked.removeListener(openCurrentURL);
-    chrome.browserAction.onClicked.addListener(openCurrentURL);
+    chrome.action.onClicked.removeListener(openCurrentURL);
+    chrome.action.onClicked.addListener(openCurrentURL);
     updateCounter();
 }
 
@@ -85,54 +90,61 @@ function chooseColor(counter) {
 function elaborateResponse(reviewsResponse, assigneesResponse) {
     pullRequestUrls = getUniquePullRequestUrls(reviewsResponse, assigneesResponse);
     reviewsCounter = reviewsResponse.total_count;
-    chrome.browserAction.setBadgeText({text: '' + pullRequestUrls.length});
+    chrome.action.setBadgeText({text: '' + pullRequestUrls.length});
     var color = chooseColor(pullRequestUrls.length);
-    chrome.browserAction.setBadgeBackgroundColor({color: color});
+    chrome.action.setBadgeBackgroundColor({color: color});
 }
 
-function executeRequest(url, token, successCallback) {
-    var xhr = new XMLHttpRequest();
-    xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4) {
-            if (xhr.status === 200) {
-                successCallback(JSON.parse(xhr.responseText));
+async function executeRequest(url, token) {
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Authorization': 'Basic ' + btoa(':' + token),
+                'Accept': 'application/vnd.github.v3+json'
             }
-            else if (xhr.status === 401) {
-                chrome.browserAction.setBadgeText({text: 'X'});
-                chrome.browserAction.setBadgeBackgroundColor({color: errorColor});
-                tokenOk = false;
-            }
+        });
+        if (response.status === 200) {
+            const json = await response.json();
+            return json;
+        } else if (response.status === 401) {
+            chrome.action.setBadgeText({text: 'X'});
+            chrome.action.setBadgeBackgroundColor({color: errorColor});
+            tokenOk = false;
+            return null;
+        } else {
+            return null;
         }
-    };
-    xhr.open('GET', url, true);
-    xhr.setRequestHeader('Authorization', 'Basic ' + btoa(':' + token));
-    xhr.send();
+    } catch (e) {
+        chrome.action.setBadgeText({text: 'X'});
+        chrome.action.setBadgeBackgroundColor({color: errorColor});
+        tokenOk = false;
+        return null;
+    }
 }
 
-function updateCounter() {
-    var reviewsResponse;
-    var assigneesResponse;
-    var token;
+async function updateCounter() {
+    let reviewsResponse;
+    let assigneesResponse;
+    let token;
+    let username;
 
     chrome.storage.sync.get({
         token: null, username: null
-    }, function (items) {
+    }, async function (items) {
         token = items.token;
         username = items.username;
         if (username === null) {
-            executeRequest(usernameURL, token, function (responseJSON) {
-                username = responseJSON.login;
+            const userResponse = await executeRequest(usernameURL, token);
+            if (userResponse && userResponse.login) {
+                username = userResponse.login;
                 chrome.storage.sync.set({username: username});
-            });
+            }
         }
-        executeRequest(searchReviewsURL + username, token, function (responseJSON) {
-            reviewsResponse = responseJSON;
-            executeRequest(searchAssigneesURL + username, token, function (responseJSON) {
-                assigneesResponse = responseJSON;
-                elaborateResponse(reviewsResponse, assigneesResponse);
-            });
-        });
+        reviewsResponse = await executeRequest(searchReviewsURL + username, token);
+        assigneesResponse = await executeRequest(searchAssigneesURL + username, token);
+        if (reviewsResponse && assigneesResponse) {
+            elaborateResponse(reviewsResponse, assigneesResponse);
+        }
     });
 }
-
-

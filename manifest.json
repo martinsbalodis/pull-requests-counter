@@ -1,5 +1,5 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
   "author": "Renuo AG",
   "name": "Pull Requests Counter",
   "description": "This extension shows the number of Pull Requests assigned to you.",
@@ -8,7 +8,7 @@
     "page": "options.html",
     "open_in_tab": true
   },
-  "browser_action": {
+  "action": {
     "default_icon": "icon.png",
     "theme_icons": [
       {
@@ -24,21 +24,14 @@
     "128": "icon128.png"
   },
   "background": {
-    "scripts": [
-      "extension.js"
-    ]
+    "service_worker": "extension.js"
   },
   "permissions": [
-    "activeTab",
-    "https://api.github.com/",
-    "alarms",
     "storage",
-    "tabs"
+    "tabs",
+    "alarms"
   ],
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "pull-request-counter@renuo.ch",
-      "strict_min_version": "57.0"
-    }
-  }
+  "host_permissions": [
+    "https://api.github.com/"
+  ]
 }
